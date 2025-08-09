@@ -1,3 +1,5 @@
+"use client";
+
 import {
   ReactNode,
   useEffect,
@@ -5,8 +7,9 @@ import {
   createContext,
   useContext,
 } from "react";
-import { DappMetadata, HashConnect } from "hashconnect";
+import { DappMetadata, HashConnect, SessionData } from "hashconnect";
 import { LedgerId } from "@hashgraph/sdk";
+import { useRouter } from "next/navigation";
 
 const appMetadata: DappMetadata = {
   name: "Pei",
@@ -19,6 +22,7 @@ interface AuthContextType {
   hashconnect: HashConnect | null;
   pairingString: string;
   pairedAccount: string | null;
+  pairingData: SessionData | null;
   isConnected: boolean;
   isConnecting: boolean;
   signIn: () => void;
@@ -36,58 +40,77 @@ export const useAuth = () => {
 };
 
 export default function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [hashconnect, setHashconnect] = useState<HashConnect | null>(null);
   const [pairingString, setPairingString] = useState("");
   const [pairedAccount, setPairedAccount] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [topic, setTopic] = useState<string | null>(null);
-
-  const isConnected = !!pairedAccount;
+  const [pairingData, setPairingData] = useState<SessionData | null>(null);
+  const isConnected = !!pairingData;
 
   useEffect(() => {
     const init = async () => {
       try {
-        const hc = new HashConnect(LedgerId.TESTNET, "", appMetadata, true);
+        const hc = new HashConnect(
+          LedgerId.TESTNET,
+          "1af9e8fec67ce22417c8b544a0b4adcd",
+          appMetadata,
+          true
+        );
         setHashconnect(hc);
 
-        // Check for existing pairing data
-        const savedPairingData = localStorage.getItem("hashconnect-pairing");
-        if (savedPairingData) {
-          const { accountId, topic: savedTopic } = JSON.parse(savedPairingData);
-          setPairedAccount(accountId);
-          setTopic(savedTopic);
+        // Restore persisted pairing if any
+        const saved = localStorage.getItem("hashconnect-pairing");
+        const savedPairingData = localStorage.getItem(
+          "hashconnect-pairing-data"
+        );
+        if (saved) {
+          const parsed = JSON.parse(saved) as {
+            accountId?: string;
+          };
+          if (parsed.accountId) setPairedAccount(parsed.accountId);
         }
 
-        // Generate pairing string for new connections
-        const ps = hc.pairingString;
-        setPairingString(ps || "");
+        if (savedPairingData) {
+          const parsedPairingData = JSON.parse(savedPairingData);
+          if (parsedPairingData) {
+            setPairingData(parsedPairingData);
+          }
+        }
+
+        // Initialize and generate a pairing string
+        await hc.init();
+
+        const ps = hc.pairingString as string | undefined;
+        setPairingString(ps ?? "");
 
         // Listen for pairing events
         hc.pairingEvent.on((pairingData) => {
-          const accountId = pairingData.accountIds[0];
+          setPairingData(pairingData);
+          const accountId = pairingData.accountIds?.[0] ?? null;
           setPairedAccount(accountId);
           setIsConnecting(false);
-
-          // Save pairing data for persistence
           localStorage.setItem(
             "hashconnect-pairing",
-            JSON.stringify({
-              accountId,
-            })
+            JSON.stringify({ accountId })
           );
-
-          console.log("Successfully paired with account:", accountId);
+          localStorage.setItem(
+            "hashconnect-pairing-data",
+            JSON.stringify(pairingData)
+          );
+          // eslint-disable-next-line no-console
+          console.log("Paired with:", accountId);
         });
 
-        // Listen for disconnection events
         hc.disconnectionEvent.on(() => {
           setPairedAccount(null);
           localStorage.removeItem("hashconnect-pairing");
+          localStorage.removeItem("hashconnect-pairing-data");
+          // eslint-disable-next-line no-console
           console.log("Wallet disconnected");
         });
-
-        await hc.init();
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.error("Failed to initialize HashConnect:", error);
         setIsConnecting(false);
       }
@@ -98,29 +121,21 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = () => {
     if (!hashconnect) return;
-
     setIsConnecting(true);
-    // The pairing string should be displayed to user (QR code or direct link)
-    console.log("Pairing string for wallet connection:", pairingString);
-
-    // Open HashPack or other wallet
-    const walletUrl = `https://wallet.hashpack.app/pairing?data=${encodeURIComponent(
-      pairingString
-    )}`;
-    window.open(walletUrl, "_blank");
+    hashconnect.openPairingModal();
   };
 
-  const signOut = async () => {
-    if (!hashconnect || !topic) return;
-
-    try {
-      await hashconnect.disconnect();
+  const signOut = () => {
+    if (!hashconnect) return;
+    (hashconnect as any).disconnect().finally(() => {
       setPairedAccount(null);
-      setTopic(null);
+      setPairingData(null);
       localStorage.removeItem("hashconnect-pairing");
-    } catch (error) {
-      console.error("Error signing out:", error);
-    }
+      localStorage.removeItem("hashconnect-pairing-data");
+
+      //redirect to homepage
+      router.replace("/");
+    });
   };
 
   const contextValue: AuthContextType = {
@@ -131,6 +146,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     isConnecting,
     signIn,
     signOut,
+    pairingData,
   };
 
   return (

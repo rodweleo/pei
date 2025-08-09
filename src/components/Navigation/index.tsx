@@ -1,7 +1,7 @@
 "use client";
 
 import NavLink from "./NavLink";
-import { ArrowRightLeft, House } from "lucide-react";
+import { ArrowRightLeft, House, UserCircle } from "lucide-react";
 
 const navLinks = [
   {
@@ -13,6 +13,11 @@ const navLinks = [
     href: "/transactions",
     label: "Transactions",
     icon: ArrowRightLeft,
+  },
+  {
+    href: "/profile",
+    label: "Profile",
+    icon: UserCircle,
   },
 ];
 export default function Navigation() {

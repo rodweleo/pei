@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pei",
-  description: "",
+  title: "Pei - Seamless Micropayments",
+  description: "Fast, secure micropayments powered by Hedera",
 };
 
 export default function RootLayout({
@@ -27,14 +27,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col w-full min-h-screen`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased w-full h-screen`}
       >
-        <Providers>
-          <main className="flex-1 min-h-0 overflow-y-auto h-full p-4">
-          {children}
-        </main>
-        <Navigation />
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
